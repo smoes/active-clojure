@@ -16,6 +16,11 @@
     [predicate constructor ordered-accessors ns])
 
 
+(defn report-lens-deprecation [type]
+  (println (str "active.clojure.record WARNING for record-type `" type
+                "`: the explicit definition of lenses is deprecated in favor of regular "
+                "accessors already being lenses")))
+
 #?(:clj
 (defmacro define-record-type
   "Attach doc properties to the type and the field names to get reasonable docstrings."
@@ -107,10 +112,13 @@
            [~@(map first ?field-triples)]
          ~@?opt+specs)
 
+       ; define predicate
        (def ~(vary-meta (document-with-arglist ?predicate '[thing] (str "Is object a `" ?type "` record? " ?docref))
                         assoc :meta record-meta)
          (fn [x#]
            (instance? ~?type x#)))
+
+       ; define constructor
        (def ~(document-with-arglist ?constructor
                                  (vec ?constructor-args)
                                  (str "Construct a `" ?type "`"
@@ -130,32 +138,39 @@
                            `~?field
                            `nil))
                        ?field-triples))))
+
+       ; define accessors
        (declare ~@(map (fn [[?field ?accessor ?lens]] ?accessor) ?field-triples))
        ~@(mapcat (fn [[?field ?accessor ?lens]]
-                   (let [?rec (with-meta `rec# {:tag ?type})]
-                     `((def ~(document-with-arglist ?accessor (vector ?type)  (str "Access `" ?field "` field"
-                                                                                   (name-doc ?field)
-                                                                                   " from a [[" ?type "]] record. " ?docref))
-                         (fn [~?rec]
-                           (check-type ~?type ~?rec)
-                           (. ~?rec ~(symbol (str "-" ?field)))))
-                       ~@(if ?lens
-                           (let [?data `data#
-                                 ?v `v#]
-                             `((def ~(document ?lens (str "Lens for the `" ?field "` field"
-                                                          (name-doc ?field)
-                                                          " from a [[" ?type "]] record." ?docref))
-                                 (lens/lens ~?accessor
-                                            (fn [~?data ~?v]
-                                              (~?constructor ~@(map
-                                                                (fn [[?shove-field ?shove-accessor]]
-                                                                  (if (= ?field ?shove-field)
-                                                                    ?v
-                                                                    `(~?shove-accessor ~?data)))
-                                                                ?field-triples)))))))
-                           '()))))
+                   (let [?rec (with-meta `rec# {:tag ?type})
+                         ?data `data#
+                         ?v `v#]
+                     `((def ~(document-with-arglist
+                              ?accessor
+                              (vector ?type)
+                              (str "Lens for the `" ?field "` field"
+                                   (name-doc ?field)
+                                   " from a [[" ?type "]] record. " ?docref))
+
+                         (lens/lens (fn [~?rec]
+                                      (check-type ~?type ~?rec)
+                                      (. ~?rec ~(symbol (str "-" ?field))))
+                                    (fn [~?data ~?v]
+                                      (~?constructor ~@(map
+                                                        (fn [[?shove-field ?shove-accessor]]
+                                                          (if (= ?field ?shove-field)
+                                                            ?v
+                                                            `(~?shove-accessor ~?data)))
+                                                        ?field-triples)))))
+                       ~(when ?lens
+                          (report-lens-deprecation ?type)
+                          `(def ~?lens ~?accessor))
+                       )))
                  ?field-triples)))))
 
+(define-record-type H (make-h a) h?
+  [a h-a])
+(lens/shove (make-h 3) h-a 4)
 
 (defn predicate->record-meta [predicate]
   ;; Expects a namespace resolved predicate
