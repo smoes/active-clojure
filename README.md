@@ -123,6 +123,10 @@ tools such as a macro `pret` that prints and returns its argument.
 The `active.clojure.match` namespace provides some syntactic sugar
 for map matching around `core.match`.
 
+### Monad
+
+An example for `active.clojure.monad` namespace can be found at https://github.com/active-group/active-clojure-monad-example
+
 ## License
 
 Copyright © 2014 Active Group GmbH
